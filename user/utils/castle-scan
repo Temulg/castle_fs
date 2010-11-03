@@ -1,0 +1,16 @@
+#!/bin/bash
+
+DISKTAB=/etc/acunu/disks
+
+if [ -e ${DISKTAB} ]; then
+    cat ${DISKTAB}
+    exit 0
+fi
+
+for dev in /dev/sd*[0-9]* /dev/hd*[0-9]* /dev/xv*[0-9]*
+do
+  if castle-probe-device "$dev" >/dev/null 2>&1
+  then
+      echo "$dev"
+  fi
+done
