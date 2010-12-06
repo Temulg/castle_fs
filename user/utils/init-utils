@@ -1,0 +1,141 @@
+# Hey, emacs! This is a -*- shell-script -*-
+
+# Size of loopback files to create, in MB (if loopback files are used)
+DISK_SIZE=1000000
+
+CONTROL_FILE=/dev/castle-fs/control
+CACHE_CFG=/etc/acunu/cache_size
+
+function kernel_fs_running {
+    [ -e "/dev/castle-fs/control" ] || lsmod | grep -q '^castle_fs$'
+}
+
+function get_cache_size_kb {
+	local TOTAL_RAM=$(awk '/MemTotal/ { print $2 }' /proc/meminfo)
+	local MIN_FREE=$(( 600 * 1024 ))
+	local MIN_CACHE=$(( 200 * 1024 ))
+	local CANDIDATE_SIZE=$(( ${TOTAL_RAM} / 2 ))
+
+    if [ -e ${CACHE_CFG} ]; then
+        cat ${CACHE_CFG}
+    else
+		if [ "$(( ${MIN_FREE} + ${MIN_CACHE} ))" -gt "${TOTAL_RAM}" ]; then
+			exit 1
+		elif [ "$(( ${TOTAL_RAM} - ${CANDIDATE_SIZE} ))" -lt "${MIN_FREE}" ]; then
+			echo $(( ${TOTAL_RAM} - ${MIN_FREE} ))
+		else
+			echo ${CANDIDATE_SIZE}
+		fi 
+    fi
+}
+
+function get_cache_size {
+	local PAGE_SIZE=$(getconf PAGESIZE)
+	local KBS_PER_PAGE=$(( ${PAGE_SIZE} / (1 * 1024) ))
+	echo $(( $(get_cache_size_kb) / ${KBS_PER_PAGE} ))
+}
+
+function init_kernel_fs {
+    if ! kernel_fs_running; then
+        echo "Castle FS kernel module not found, trying to insert."
+        modprobe castle-fs castle_cache_size=$(get_cache_size)
+        # Wait up to 5 seconds for the control file to appear
+        # udev renaming is sometimes slow
+        for i in `seq 50`; do
+            if [ -e "${CONTROL_FILE}" ]; then
+                break
+            fi
+            # Wait 0.1s
+            usleep 100000
+        done
+        if [ ! -e "${CONTROL_FILE}" ]; then
+            echo "ERROR: control file '${CONTROL_FILE}' has not been created after kernel module insertion. Exiting."
+            exit 1
+        fi
+    fi
+}
+
+function unmount_kernel_fs {
+    if kernel_fs_running; then 
+        echo "Unmounting Kernel FS..."
+
+        if [ "$RUNLEVEL" = 0 ] || [ "$RUNLEVEL" = 6 ]
+        then
+            echo "Looks like we're shutting down, will wait until castle-fs is unloaded (maybe forever)"
+            while [ -e $CONTROL_FILE ]
+            do
+              rmmod castle_fs || true
+              sleep 1
+            done
+        else
+            rmmod castle_fs
+
+            # Wait up to 65 seconds for the control file to disappear
+            for i in `seq 650`; do
+                if [ ! -e ${CONTROL_FILE} ]; then
+                    break
+                fi
+                # Wait 0.1s
+                usleep 100000
+            done
+        fi
+        if [ -e ${CONTROL_FILE} ]; then
+            echo "ERROR: removed castle_fs module, but the control file '${CONTROL_FILE}' is still there. Exiting."
+            exit 1
+        fi
+    fi
+}
+
+function load_fs_and_claim {
+    declare -a devs=() loops=()
+
+    for disk in "$@"
+    do
+      if [ -e "$disk" ] && [ -b "$disk" ]
+          then
+          # Block special
+          devs=("${devs[@]}" "$disk")
+          continue
+      fi
+
+      if ! [ -e "$disk" ]
+      then
+          if echo $disk | grep -q '^/dev/'
+          then
+          # Presumably block special device (not existing)
+              echo "Device $disk does not exist, aborting"
+              exit 1
+          fi
+
+          # Loopback file (not existing)
+          mkdir -p $(dirname "$disk")
+          dd conv=excl if=/dev/zero of=$disk bs=1M count=1 seek=$DISK_SIZE 2>/dev/null
+          mkcastlefs "$disk"
+      fi
+
+      if [ -e "$disk" ] && [ -f "$disk" ]
+      then
+          # Loopback file (existing)
+          loops=("${loops[@]}" "$disk")
+      fi
+    done
+
+    for disk in "${loops[@]}"
+    do
+      loop=$(losetup -f)
+      losetup "$loop" "$disk"
+      devs=("${devs[@]}" "$loop")
+    done
+
+    for dev in "${devs[@]}"
+    do
+      castle-probe-device "$dev"
+    done
+
+    init_kernel_fs
+
+    for dev in "${devs[@]}"
+    do
+      castle-cli claim_dev "$dev" > /dev/null
+    done
+}
