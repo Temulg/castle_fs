@@ -1997,7 +1997,7 @@ static void castle_back_big_put_continue(struct castle_object_replace *replace)
     
     spin_lock(&stateful_op->lock);
 
-    if (stateful_op->curr_op != NULL);
+    if (stateful_op->curr_op != NULL)
     {
         struct castle_back_op *op = stateful_op->curr_op;
         if (op->req.tag == CASTLE_RING_PUT_CHUNK && op->buf)
@@ -2026,7 +2026,7 @@ static void castle_back_big_put_complete(struct castle_object_replace *replace, 
 
     spin_lock(&stateful_op->lock);
     
-    if (stateful_op->curr_op != NULL);
+    if (stateful_op->curr_op != NULL)
     {
         struct castle_back_op *op = stateful_op->curr_op;
         if (op->req.tag == CASTLE_RING_PUT_CHUNK && op->buf)
