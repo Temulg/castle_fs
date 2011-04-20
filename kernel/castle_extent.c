@@ -1901,6 +1901,7 @@ static struct castle_slave *slave_needs_remapping(uint32_t slave_id)
  * @param ext       The extent to remap.
  *
  * @return 1:       We got kthread_should_stop() while remapping an extent.
+ * @return -ENOSPC: We got an allocation failure (out of disk space).
  * @return 0:       We successfully processed the extent.
  */
 static int castle_extent_remap(c_ext_t *ext)
@@ -1993,7 +1994,7 @@ static int castle_extent_remap(c_ext_t *ext)
                 ext->use_shadow_map = 0;
                 spin_unlock(&ext->shadow_map_lock);
                 castle_vfree(ext->shadow_map);
-                return 1;
+                return -ENOSPC;
             }
             /*
              * Lock the shadow map here because we don't want the read/write path to access
@@ -2142,7 +2143,7 @@ static int castle_extents_rebuild_run(void *unused)
     struct list_head            *entry, *tmp;
     c_ext_t                     *ext;
     struct castle_slave         *cs, *evacuated_slaves[MAX_NR_SLAVES], *oos_slaves[MAX_NR_SLAVES];
-    int                         i, nr_evacuated_slaves=0, nr_oos_slaves=0, exit_early=0;
+    int                         i, ret=0, nr_evacuated_slaves=0, nr_oos_slaves=0, exit_early=0;
     struct castle_fs_superblock *fs_sb;
 
     /* Initialise the rebuild list. */
@@ -2199,7 +2200,7 @@ restart:
                  * The only 'error' castle_extent_remap should return is when it discovers that
                  * kthread_should_stop().
                  */
-                if (castle_extent_remap(ext) || kthread_should_stop())
+                if ((ret = castle_extent_remap(ext)) || kthread_should_stop())
                 {
                     castle_printk("Warning: rebuild terminating early ...\n");
                     exit_early = 1;
@@ -2211,7 +2212,15 @@ restart:
         }
 
         if (exit_early)
-            goto out;
+        {
+            if (ret == -ENOSPC)
+            {
+                /* Currently we can't do anything other than go back to the wait_event. */
+                printk("Rebuild run pausing.\n");
+                continue;
+            } else
+                goto out;
+        }
 
         if ((rebuild_to_seqno == atomic_read(&current_rebuild_seqno)) &&
             !castle_extents_rescan_required)
