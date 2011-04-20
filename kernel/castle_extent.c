@@ -2227,9 +2227,7 @@ restart:
             list_for_each(entry, &castle_slaves.slaves)
             {
                 cs = list_entry(entry, struct castle_slave, list);
-                if (test_bit(CASTLE_SLAVE_EVACUATE_BIT, &cs->flags) &&
-                   !test_bit(CASTLE_SLAVE_REMAPPED_BIT, &cs->flags) &&
-                   !test_bit(CASTLE_SLAVE_OOS_BIT, &cs->flags))
+                if (test_bit(CASTLE_SLAVE_EVACUATE_BIT, &cs->flags))
                     evacuated_slaves[nr_evacuated_slaves++] = cs;
                 if (test_bit(CASTLE_SLAVE_OOS_BIT, &cs->flags))
                     oos_slaves[nr_oos_slaves++] = cs;
@@ -2264,7 +2262,6 @@ restart:
         {
             if (evacuated_slaves[i])
             {
-                BUG_ON(test_bit(CASTLE_SLAVE_GHOST_BIT, &evacuated_slaves[i]->flags));
                 castle_printk("Finished remapping evacuated slave 0x%x.\n",
                               evacuated_slaves[i]->uuid);
                 set_bit(CASTLE_SLAVE_OOS_BIT, &evacuated_slaves[i]->flags);
@@ -2293,7 +2290,7 @@ out:
 /*
  * Kick the rebuild thread to start the rebuild process (e.g. when a slave dies or is evacuated).
  */
-void castle_extents_rebuild_wake(void)
+void castle_extents_rebuild_start(void)
 {
     atomic_inc(&current_rebuild_seqno);
     wake_up(&rebuild_wq);
