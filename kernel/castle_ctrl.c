@@ -692,7 +692,7 @@ void castle_control_slave_evacuate(uint32_t uuid, int *ret)
     set_bit(CASTLE_SLAVE_EVACUATE_BIT, &slave->flags);
     castle_printk("Slave 0x%x (%s) has been marked as evacuating.\n",
             slave->uuid, bdevname(slave->bdev, b));
-    castle_extents_rebuild_wake();
+    castle_extents_rebuild_start();
     *ret = EXIT_SUCCESS;
 }
 
