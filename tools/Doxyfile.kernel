@@ -1,0 +1,4 @@
+@INCLUDE = Doxyfile.proto
+PROJECT_NAME	       = fs.hg/kernel
+INPUT                  = ../kernel
+OUTPUT_DIRECTORY       = docs/kernel
