@@ -1,6 +1,7 @@
 #include <linux/kernel.h>
 #include <linux/capability.h>
 #include <linux/blkdev.h>
+#include <linux/kref.h>
 
 #include "castle_public.h"
 #include "castle.h"
@@ -12,6 +13,7 @@
 #include "castle_da.h"
 #include "castle_utils.h"
 
+static wait_queue_head_t castle_sysfs_kobj_release_wq;
 static struct kobject  double_arrays_kobj;
 struct castle_sysfs_versions {
     struct kobject kobj;
@@ -456,6 +458,16 @@ static ssize_t castle_attr_store(struct kobject *kobj,
     return entry->store(kobj, attr, page, length);
 }
 
+static void castle_sysfs_kobj_release(struct kobject *kobj)
+{
+    wake_up(&castle_sysfs_kobj_release_wq);
+}
+
+static void castle_sysfs_kobj_release_wait(struct kobject *kobj)
+{
+    wait_event(castle_sysfs_kobj_release_wq, atomic_read(&kobj->kref.refcount) == 0);
+}
+
 static struct sysfs_ops castle_sysfs_ops = {
     .show   = castle_attr_show,
     .store  = castle_attr_store,
@@ -708,6 +720,7 @@ static struct attribute *castle_collection_attrs[] = {
 };
 
 static struct kobj_type castle_collection_ktype = {
+    .release        = castle_sysfs_kobj_release,
     .sysfs_ops      = &castle_sysfs_ops,
     .default_attrs  = castle_collection_attrs,
 };
@@ -731,6 +744,7 @@ int castle_sysfs_collection_add(struct castle_attachment *collection)
 void castle_sysfs_collection_del(struct castle_attachment *collection)
 {
     kobject_remove(&collection->kobj);
+    castle_sysfs_kobj_release_wait(&collection->kobj);
 }
 
 /* Initialisation of sysfs dirs == kobjs registration */
@@ -738,6 +752,7 @@ int castle_sysfs_init(void)
 {
     int ret;
 
+    init_waitqueue_head(&castle_sysfs_kobj_release_wq);
     memset(&castle.kobj, 0, sizeof(struct kobject));
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,18)
