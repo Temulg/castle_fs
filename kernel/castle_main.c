@@ -448,7 +448,7 @@ static int slave_id = 0;
  *
  * @param uuid      The uuid for the slave to be added.
  */
-static void castle_slave_ghost_add(uint32_t uuid)
+static struct castle_slave *castle_slave_ghost_add(uint32_t uuid)
 {
     struct castle_slave *slave;
 
@@ -461,7 +461,7 @@ static void castle_slave_ghost_add(uint32_t uuid)
     set_bit(CASTLE_SLAVE_GHOST_BIT, &slave->flags);
     set_bit(CASTLE_SLAVE_OOS_BIT, &slave->flags);
     list_add(&slave->list, &castle_slaves.slaves);
-    return;
+    return slave;
 }
 
 extern atomic_t current_rebuild_seqno;
@@ -469,7 +469,7 @@ extern atomic_t current_rebuild_seqno;
 #define MAX_VERSION -1
 int castle_fs_init(void)
 {
-    struct   list_head *lh, *tmp;
+    struct   list_head *lh;
     struct   castle_slave *cs;
     struct   castle_fs_superblock fs_sb, *cs_fs_sb;
     int      ret, first, prev_new_dev = -1;
@@ -581,25 +581,10 @@ int castle_fs_init(void)
         }
     }
 
-    /* If there is a slave which did not support the version, mark it as out-of-service. */
-    list_for_each_safe(lh, tmp, &castle_slaves.slaves)
-    {
-        cs = list_entry(lh, struct castle_slave, list);
-        if ((cs->fs_versions[0] != bcv) && (cs->fs_versions[1] != bcv))
-        {
-            char                        b[BDEVNAME_SIZE];
-
-            BUG_ON(need_rebuild); /* We should only find one slave. */
-
-            castle_printk("Slave 0x%x [%s] is not in quorum of live slaves. "
-                          "Setting as out-of-service.\n",
-                cs->uuid, bdevname(cs->bdev, b));
-            set_bit(CASTLE_SLAVE_OOS_BIT, &cs->flags);
-        }
-    }
-
-    /* 1. Either all disks should be new or none.
-     * 2. Find the Greatest Common Version. */
+    /*
+     * 1. Either all disks should be new or none.
+     * 2. If there is a slave which did not support the version, mark it as out-of-service.
+     */
     prev_new_dev = -1;
     list_for_each(lh, &castle_slaves.slaves)
     {
@@ -613,6 +598,16 @@ int castle_fs_init(void)
         {
             castle_printk("Few disks are marked new and few are not\n");
             return -EINVAL;
+        }
+
+        if ((cs->fs_versions[0] != bcv) && (cs->fs_versions[1] != bcv))
+        {
+            char                        b[BDEVNAME_SIZE];
+
+            castle_printk("Slave 0x%x [%s] is not in quorum of live slaves. "
+                          "Setting as out-of-service.\n",
+                cs->uuid, bdevname(cs->bdev, b));
+            set_bit(CASTLE_SLAVE_OOS_BIT, &cs->flags);
         }
     }
 
@@ -717,18 +712,34 @@ int castle_fs_init(void)
             cs = castle_slave_find_by_uuid(fs_sb.slaves[i]);
             if (!cs)
             {
+                /* The slave used to exist as part of this filesystem but no longer. */
                 castle_printk("Warning: slave 0x%x is no longer live.\n",
                               fs_sb.slaves[i]);
-                castle_slave_ghost_add(fs_sb.slaves[i]);
+                cs = castle_slave_ghost_add(fs_sb.slaves[i]);
                 if (!test_bit(CASTLE_SLAVE_REMAPPED_BIT, &fs_sb.slaves_flags[i]))
                 {
-                    castle_printk("Slave 0x%x has not been remapped. Forcing rebuild\n", 
+                    castle_printk("Slave 0x%x is missing and has not been remapped.\n",
                                   fs_sb.slaves[i]);
                     need_rebuild++;
-                }
-            }
-            if (cs)
+                } else
+                    set_bit(CASTLE_SLAVE_REMAPPED_BIT, &cs->flags);
+                /* Note. If slave was evacuating, we don't care. It is now oos. */
+            } else
             {
+                if ((cs->fs_versions[0] != bcv) && (cs->fs_versions[1] != bcv))
+                {
+                    /* This slave is not in the quorum. Check if it needs remapping. */
+                    if (test_bit(CASTLE_SLAVE_REMAPPED_BIT, &fs_sb.slaves_flags[i]))
+                    {
+                        castle_printk("Slave 0x%x has already been remapped.\n", fs_sb.slaves[i]);
+                        set_bit(CASTLE_SLAVE_REMAPPED_BIT, &cs->flags);
+                    } else
+                    {
+                        castle_printk("Slave 0x%x is not in quorum and has not been remapped.\n",
+                                      fs_sb.slaves[i]);
+                        need_rebuild++;
+                    }
+                }
                 if (test_bit(CASTLE_SLAVE_OOS_BIT, &fs_sb.slaves_flags[i]))
                     set_bit(CASTLE_SLAVE_OOS_BIT, &cs->flags);
                 /* If EVACUATE is set, but not OOS, then evacuation has not completed. */
@@ -741,6 +752,13 @@ int castle_fs_init(void)
                 }
             }
         }
+    }
+
+    /* We cannot handle more than one non-evacuating, not-remapped, slave. */
+    if (need_rebuild > 1)
+    {
+        castle_printk("Error: too many out-of-service slaves need remapping. Cannot start filesystem\n");
+        return -EINVAL;
     }
 
     /* Init the fs superblock */
