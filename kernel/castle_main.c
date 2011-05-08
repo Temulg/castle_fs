@@ -1920,10 +1920,7 @@ void castle_attachment_put(struct castle_attachment *ca)
     BUG_ON(ca->ref_cnt < 0);
     
     if (ca->ref_cnt == 0)
-    {
         to_free = 1;
-        list_del(&ca->list);
-    }
 
     spin_unlock(&castle_attachments.lock);
 
@@ -1942,6 +1939,17 @@ void castle_attachment_put(struct castle_attachment *ca)
         castle_double_array_put(da_id);
         castle_printk("Attachment %u is completly removed\n", ca_id);
     }
+}
+
+void castle_attachment_delete(struct castle_attachment *ca)
+{
+    /* Drop the attachment from list, to prevent new references on attachment. */
+    spin_lock(&castle_attachments.lock);
+    list_del(&ca->list);
+    spin_unlock(&castle_attachments.lock);
+
+    /* Release the reference taken at init. */
+    castle_attachment_put(ca);
 }
 
 EXPORT_SYMBOL(castle_attachment_get);
@@ -2283,7 +2291,7 @@ static void castle_attachments_free(void)
         if(ca->device)
             castle_device_free(ca);
         else
-            castle_attachment_put(ca);
+            castle_attachment_delete(ca);
     }
 
     if (castle_attachments.major)
