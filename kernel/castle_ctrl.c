@@ -443,12 +443,23 @@ void castle_control_collection_detach(collection_id_t collection,
         return;
     }
 
-    castle_attachment_delete(ca);
+    /* Mark attachment as deleted. */
+    castle_attachment_free(ca);
 
     castle_printk("Deleting Collection Attachment %u (%s, %u)/%u\n", 
             collection, ca->col.name, ca->version, ca->ref_cnt);
 
+    /* Release reference. */
     castle_attachment_put(ca);
+
+    /* Release transaction lock, we dont want to block on attachment delete with the lock. */
+    CASTLE_TRANSACTION_END;
+
+    /* Complete free. This would block until attachment is removed. */
+    castle_attachment_free_complete(ca);
+
+    /* Get the lock again and finish the ioctl. */
+    CASTLE_TRANSACTION_BEGIN;
 
     *ret = 0;
 }

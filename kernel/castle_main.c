@@ -84,6 +84,9 @@ int  castle_latest_key = 0; /**< maintain latest key for each CT. Useful to test
 module_param(castle_latest_key, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 MODULE_PARM_DESC(castle_latest_key, "castle_latest_key");
 
+static DECLARE_WAIT_QUEUE_HEAD(castle_detach_waitq);
+
+
 //#define DEBUG
 #ifndef DEBUG
 #define debug(_f, ...)  ((void)0)
@@ -1933,15 +1936,15 @@ void castle_attachment_put(struct castle_attachment *ca)
         castle_events_collection_detach(ca->col.id);
         castle_sysfs_collection_del(ca);
 
-        castle_free(ca->col.name);
-        castle_free(ca);
         castle_version_detach(version);
         castle_double_array_put(da_id);
         castle_printk("Attachment %u is completly removed\n", ca_id);
+
+        wake_up(&castle_detach_waitq);
     }
 }
 
-void castle_attachment_delete(struct castle_attachment *ca)
+void castle_attachment_free(struct castle_attachment *ca)
 {
     /* Drop the attachment from list, to prevent new references on attachment. */
     spin_lock(&castle_attachments.lock);
@@ -1950,6 +1953,16 @@ void castle_attachment_delete(struct castle_attachment *ca)
 
     /* Release the reference taken at init. */
     castle_attachment_put(ca);
+}
+
+void castle_attachment_free_complete(struct castle_attachment *ca)
+{
+    /* Wait for the attachment to get freed. */
+    wait_event(castle_detach_waitq, (ca->ref_cnt == 0));
+
+    /* Free collection. */
+    castle_free(ca->col.name);
+    castle_free(ca);
 }
 
 EXPORT_SYMBOL(castle_attachment_get);
@@ -2291,7 +2304,10 @@ static void castle_attachments_free(void)
         if(ca->device)
             castle_device_free(ca);
         else
-            castle_attachment_delete(ca);
+        {
+            castle_attachment_free(ca);
+            castle_attachment_free_complete(ca);
+        }
     }
 
     if (castle_attachments.major)
