@@ -1,0 +1,4 @@
+@INCLUDE = Doxyfile.proto
+PROJECT_NAME	       = fs.hg/user
+INPUT                  = ../user
+OUTPUT_DIRECTORY       = docs/user
