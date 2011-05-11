@@ -1468,11 +1468,15 @@ struct castle_double_array {
     wait_queue_head_t           merge_budget_waitq;
     c_vl_okey_t                *last_key;
     /* Compaction (Big-merge) */
-    int                         top_level;          /**< height of doubling array */
-    atomic_t                    nr_del_versions;    /**< #versions deleted since 
-                                                         last compaction. */
-    int                         compacting;         /**< marked when DA has to
-                                                         start compaction. */
+     int                         top_level;          /**< Levels in the doubling array.          */
+     atomic_t                    nr_del_versions;    /**< Versions deleted since last compaction.*/
+     int                         compacting;         /**< Set when DA has to start compaction.   */
+ 
+     /* General purpose structure for placing DA on a workqueue.
+      * @TODO Currently used only by castle_da_levle0_modified_promote(), hence
+      * there is no locking. */
+     struct work_struct          work;               /**< General purpose work structure.        */
+     void                       *private;            /**< Work private data.                     */
 };
 
 extern int castle_latest_key;
