@@ -188,7 +188,6 @@ int castle_sysfs_version_del(version_t version)
         k = list_entry(pos, struct castle_sysfs_version, list);
         if (k->version == version)
         {
-            list_del(pos);
             v = k;
             break;
         }
@@ -198,7 +197,6 @@ int castle_sysfs_version_del(version_t version)
 
     sysfs_remove_file(&castle_sysfs_versions.kobj, &v->csys_entry.attr);
 
-    castle_free(v);
     return 0;
 }
 
