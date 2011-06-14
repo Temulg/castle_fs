@@ -33,6 +33,7 @@ static          LIST_HEAD(castle_versions_init_list);
 static struct list_head  *castle_versions_counts_hash   = NULL;
 
 static c_ver_t            castle_versions_last   = INVAL_VERSION;
+static atomic_t           castle_versions_count  = ATOMIC(0);
 static c_mstore_t        *castle_versions_mstore = NULL;
 
 static int castle_versions_deleted_sysfs_hide = 1;  /**< Hide deleted versions from sysfs?      */
@@ -302,6 +303,7 @@ int castle_versions_count_get(c_da_t da_id, cv_health_t health)
  */
 static int castle_version_hash_remove(struct castle_version *v, void *unused)
 {
+    atomic_dec(&castle_versions_count);
     list_del(&v->hash_list);
     kmem_cache_free(castle_versions_cache, v);
 
@@ -714,6 +716,7 @@ static struct castle_version * castle_version_delete_from_tree(struct castle_ver
 
     /* Remove version from hash. */
     castle_versions_drop(v);
+    atomic_dec(&castle_versions_count);
     __castle_versions_hash_remove(v);
     list_del(&v->del_list);
     if (version_list)
@@ -907,6 +910,8 @@ static struct castle_version* castle_version_add(c_ver_t version,
         castle_versions_init_add(v);
         castle_versions_hash_add(v);
     }
+    /* Increment the number of versions known to the filesystem. */
+    atomic_inc(&castle_versions_count);
 
     return v;
 
@@ -1310,10 +1315,11 @@ static struct castle_version* castle_version_new_create(int snap_or_clone,
 
     /* Only accept 50k versions. This guarantees that we won't run out of space in
        the mstore extent. */
-    if(version >= 50000)
+    if(atomic_read(&castle_versions_count) >= 50000)
     {
         castle_printk(LOG_WARN, "Too many versions created: %d, rejecting an attempt "
-                                "to create a new one.\n", castle_versions_last);
+                                "to create a new one.\n",
+                                atomic_read(&castle_versions_count));
         return NULL;
     }
 
@@ -1346,6 +1352,7 @@ static struct castle_version* castle_version_new_create(int snap_or_clone,
     /* Check if the version got initialised */
     if(!(v->flags & CV_INITED_MASK))
     {
+        atomic_dec(&castle_versions_count);
         castle_versions_hash_remove(v);
         kmem_cache_free(castle_versions_cache, v);
 
