@@ -14,15 +14,6 @@
 #ifndef __KERNEL__
 #define PAGE_SIZE 4096
 #define PAGE_SHIFT 12
-/* These must be the same as castle.h in fs.hg */
-enum {
-    CVT_TYPE_INLINE          = 0x10,
-    CVT_TYPE_ONDISK          = 0x20,
-    CVT_TYPE_INVALID         = 0x00,
-    CVT_TYPE_COUNTER_SET     = 0x80,
-    CVT_TYPE_COUNTER_ADD     = 0x100,
-
-};
 #endif
 
 typedef enum {
@@ -444,6 +435,12 @@ typedef struct castle_request_replace {
     uint32_t              value_len;
 } castle_request_replace_t;
 
+typedef struct castle_request_remove {
+    c_collection_id_t     collection_id;
+    c_vl_okey_t          *key_ptr;
+    uint32_t              key_len;
+} castle_request_remove_t;
+
 typedef struct castle_request_counter_replace {
     c_collection_id_t     collection_id;
     c_vl_okey_t          *key_ptr;
@@ -452,12 +449,6 @@ typedef struct castle_request_counter_replace {
     uint32_t              value_len;
     uint8_t               add; /* 0: SET op, 1: ADD op */
 } castle_request_counter_replace_t;
-
-typedef struct castle_request_remove {
-    c_collection_id_t     collection_id;
-    c_vl_okey_t          *key_ptr;
-    uint32_t              key_len;
-} castle_request_remove_t;
 
 typedef struct castle_request_get {
     c_collection_id_t    collection_id;
@@ -550,6 +541,14 @@ typedef struct castle_response {
     uint64_t                 length;
     castle_interface_token_t token;
 } castle_response_t;
+
+/* Value types used in struct castle_iter_val. */
+enum {
+    CASTLE_VALUE_TYPE_INVALID         = 0,
+    CASTLE_VALUE_TYPE_INLINE          = 1,
+    CASTLE_VALUE_TYPE_OUT_OF_LINE     = 2,
+    CASTLE_VALUE_TYPE_INLINE_COUNTER  = 3
+};
 
 struct castle_iter_val {
     uint64_t               length;
