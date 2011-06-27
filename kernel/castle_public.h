@@ -7,7 +7,7 @@
 #include <sys/time.h>
 #endif
 
-#define CASTLE_PROTOCOL_VERSION 10
+#define CASTLE_PROTOCOL_VERSION 11
 
 #define PACKED               __attribute__((packed))
 
