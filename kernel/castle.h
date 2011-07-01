@@ -1371,6 +1371,12 @@ typedef struct castle_rq_enumerator {
     castle_iterator_end_io_t      end_io;
     void                         *private;
     int                           sync_call; /* TODO: Cleanup, not requried */
+
+    /* Variables used for counter accumulation. */
+    c_val_tup_t                   counter_accumulator;
+    void                         *counter_key;
+    struct node_buf_t            *counter_buf;
+    int                           counter_idx;
 } c_rq_enum_t;
 
 struct castle_merged_iterator;
