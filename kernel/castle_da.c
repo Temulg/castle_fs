@@ -3866,7 +3866,8 @@ static int castle_da_merge_progress_update(struct castle_da_merge *merge, uint32
  */
 static int castle_da_entry_skip(struct castle_da_merge *merge,
                                 void *key,
-                                c_ver_t version)
+                                c_ver_t version,
+                                int counter_delta)
 {
     struct castle_btree_type *btree = merge->out_btree;
     struct castle_version_delete_state *state = &merge->snapshot_delete;
@@ -3884,7 +3885,7 @@ static int castle_da_entry_skip(struct castle_da_merge *merge,
         state->next_deleted = NULL;
     }
 
-    return castle_version_is_deletable(state, version);
+    return castle_version_is_deletable(state, version, counter_delta);
 }
 
 static int castle_da_merge_unit_do(struct castle_da_merge *merge, uint32_t unit_nr)
@@ -3917,7 +3918,7 @@ static int castle_da_merge_unit_do(struct castle_da_merge *merge, uint32_t unit_
         stats = merge->merged_iter->stats;
 
         /* Skip entry if version marked for deletion and no descendant keys. */
-        if (castle_da_entry_skip(merge, key, version))
+        if (castle_da_entry_skip(merge, key, version, CVT_ADD_COUNTER(cvt)))
         {
             /* Update per-version and merge statistics.
              *

@@ -433,16 +433,24 @@ static int castle_version_needs_parent(struct castle_version *v, struct castle_v
  *
  * @return 1 if, version is deletable.
  */
-int castle_version_is_deletable(struct castle_version_delete_state *state, c_ver_t version)
+int castle_version_is_deletable(struct castle_version_delete_state *state,
+                                c_ver_t version,
+                                int counter_delta)
 {
     struct castle_version *cur_v = NULL, *w;
     struct list_head *list;
     int ret = 1;
 
-    /* Set occupied bit for this version. Merge is single-threaded and runs on
-     * same processor. No need of set_bit. */
     BUG_ON(version >= state->last_version);
-    __set_bit(version, state->occupied);
+
+    /* Set occupied bit for this version. Merge is single-threaded and runs on
+     * same processor. No need of set_bit.
+     *
+     * Counter deltas (i.e. adds) don't count as occupied versions, because they
+     * rely on their ancestoral versions (just like if the version wasn't written at all).
+     */
+    if(!counter_delta)
+        __set_bit(version, state->occupied);
 
     read_lock_irq(&castle_versions_hash_lock);
 
