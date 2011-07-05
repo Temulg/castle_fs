@@ -1287,30 +1287,41 @@ static void castle_ct_merged_iter_rbtree_insert(c_merged_iter_t *iter,
     rb_insert_color(node, root);
 }
 
-static struct component_iterator * castle_ct_merge_iter_rbtree_min_del(c_merged_iter_t *iter)
+static inline struct component_iterator* castle_ct_merged_iter_rbtree_min_get(
+                                                                      c_merged_iter_t *iter)
 {
     struct rb_root *root = &iter->rb_root;
     struct rb_node *min;
 
     /* Get the first element in the sorted order(minimum). */
     min = rb_first(root);
-    BUG_ON(!min);
-
-    /* Erase the element from tree. */
-    rb_erase(min, root);
+    if(!min)
+        return NULL;
 
     /* Return the iterator. */
     return rb_entry(min, struct component_iterator, rb_node);
 }
 
-static void castle_ct_merge_iter_rbtree_remove(c_merged_iter_t *iter,
-                                               struct component_iterator *comp_iter)
+static inline void castle_ct_merged_iter_rbtree_del(c_merged_iter_t *iter,
+                                                    struct component_iterator *comp_iter)
 {
-    struct rb_root *root = &iter->rb_root;
-    struct rb_node *node = &comp_iter->rb_node;
-
     /* Erase the element from tree. */
-    rb_erase(node, root);
+    rb_erase(&comp_iter->rb_node, &iter->rb_root);
+}
+
+static struct component_iterator* castle_ct_merge_iter_rbtree_min_del(c_merged_iter_t *iter)
+{
+    struct component_iterator *comp_iter;
+
+    /* Get the smallest iter from the tree. */
+    comp_iter = castle_ct_merged_iter_rbtree_min_get(iter);
+    BUG_ON(!comp_iter);
+
+    /* Delete from the rbtree. */
+    castle_ct_merged_iter_rbtree_del(iter, comp_iter);
+
+    /* Return the iterator. */
+    return comp_iter;
 }
 
 static int _castle_ct_merged_iter_prep_next(c_merged_iter_t *iter,
@@ -1403,7 +1414,9 @@ static int castle_ct_merged_iter_has_next(c_merged_iter_t *iter)
     return (!iter->err && (iter->non_empty_cnt > 0));
 }
 
-static void castle_ct_merged_iter_consume(struct component_iterator *iter)
+static void castle_ct_merged_iter_consume(struct component_iterator *iter,
+                                          int skip,
+                                          void *skip_key)
 {
     struct component_iterator *other_iter;
     struct list_head *l;
@@ -1416,10 +1429,14 @@ static void castle_ct_merged_iter_consume(struct component_iterator *iter)
         BUG_ON(!other_iter->cached);
         /* Head should be newest. */
         BUG_ON(iter > other_iter);
+        if(skip)
+            other_iter->iterator_type->skip(other_iter->iterator, skip_key);
         other_iter->cached = 0;
     }
 
-    /* Clear cached flag for the min iterator too. */
+    /* Skip and clear cached flag for the min iterator too. */
+    if(skip)
+        iter->iterator_type->skip(iter->iterator, skip_key);
     iter->cached = 0;
 }
 
@@ -1505,7 +1522,7 @@ static void castle_ct_merged_iter_next(c_merged_iter_t *iter,
     debug("Smallest entry is from iterator: %p.\n", comp_iter);
 
     /* Consume (clear cached flags) from the component iterators. */
-    castle_ct_merged_iter_consume(comp_iter);
+    castle_ct_merged_iter_consume(comp_iter, 0 /* don't skip. */, NULL);
 
     /* Work out the counter value (handle the case where the iterator contains a counter.
        NOTE: this destroys same_kv list. Don't use it after this point. */
@@ -1524,42 +1541,44 @@ static void castle_ct_merged_iter_skip(c_merged_iter_t *iter,
                                        void *key)
 {
     struct component_iterator *comp_iter;
-    int i, skip_cached;
+    int i;
 
     debug_iter("%s:%p\n", __FUNCTION__, iter);
-    /* Go through iterators, and do the following:
-       * call skip in each of the iterators
-       * check if we have something cached
-       * if we do, and the cached k < key, flush it
+    /* If we are skipping in the merged iterator, we are not able to inform the client
+       about all duplicate entries. Check that the client isn't asking for it. */
+    BUG_ON(iter->each_skip);
+    /* We expect the iterator to be skipped after prep_next() call (and not after next()).
+       Otherwise, we won't have an entry cached for some of the component iterator
+       and we will be unable to decided whether to skip in them.
+       prep_next() guarantees that each of the component iterator will either be
+       completed or there will be something cached for that iterator.
+       Also, all iterators should support skip functionality.
      */
     for(i=0; i<iter->nr_iters; i++)
     {
         comp_iter = iter->iterators + i;
-        if(comp_iter->completed)
-            continue;
 
-        /* Check if the cached entry needs to be skipped AHEAD of the skip
-           being called on the appropriate component iterator (which may
-           invalidate the cached key pointer */
-        skip_cached = comp_iter->cached &&
-                     (iter->btree->key_compare(comp_iter->cached_entry.k, key) < 0);
-        /* Next skip in the component iterator */
-        BUG_ON(!comp_iter->iterator_type->skip);
-
-        /* If cached entry is not being skipped, bigger than the skip key, then no
-         * need to call skip on low level iterator. */
-        /* Flush cached entry if it was to small (this doesn't inspect the cached entry
-           any more). */
-        if (skip_cached)
+        if(!comp_iter->completed && !comp_iter->cached)
         {
-            comp_iter->iterator_type->skip(comp_iter->iterator, key);
-            BUG_ON(iter->each_skip);
-            if (comp_iter->cached)
-            {
-                castle_ct_merge_iter_rbtree_remove(iter, comp_iter);
-                comp_iter->cached = 0;
-            }
+            castle_printk(LOG_ERROR, "ERROR, trac-2622: Found incomplete, non-cached iter: %p[%d]=%p\n",
+                iter, i, comp_iter);
         }
+        //BUG_ON(!comp_iter->completed && !comp_iter->cached);
+        BUG_ON(!comp_iter->iterator_type->skip);
+    }
+
+    /* Go through the rbtree, and extract all the keys smaller than the key we
+       are skipping to. */
+    while((comp_iter = castle_ct_merged_iter_rbtree_min_get(iter)) &&
+          (iter->btree->key_compare(comp_iter->cached_entry.k, key) < 0))
+    {
+        /* Since the iterator is in the rb_tree, it must be cached. */
+        BUG_ON(!comp_iter->cached);
+        /* Delete from the rbtree. */
+        castle_ct_merged_iter_rbtree_del(iter, comp_iter);
+        /* Consume (clear cached flags & skip) from all component iterators
+           on the same_kv list. */
+        castle_ct_merged_iter_consume(comp_iter, 1 /* skip. */, key);
     }
 }
 
