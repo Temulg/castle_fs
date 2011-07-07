@@ -1698,6 +1698,9 @@ void castle_object_get_complete(struct castle_bio_vec *c_bvec,
         /* Return early if we have to keep accumulating. */
         if(!finished)
             return;
+        /* Create local copy of the cvt. Its unsafe to use 'get' structure
+           after start_reply callback. */
+        cvt = get->cvt;
     }
     else
         get->cvt = cvt;
@@ -1708,7 +1711,7 @@ void castle_object_get_complete(struct castle_bio_vec *c_bvec,
     castle_object_bkey_free(c_bvec->key);
 
     /* Deal with error case, or non-existant value. */
-    if(err || CVT_INVALID(get->cvt) || CVT_TOMBSTONE(get->cvt))
+    if(err || CVT_INVALID(cvt) || CVT_TOMBSTONE(cvt))
     {
         debug("Error, invalid or tombstone.\n");
         /* Dont have any object returned, no need to release reference of object. */
@@ -1722,10 +1725,10 @@ void castle_object_get_complete(struct castle_bio_vec *c_bvec,
         return;
     }
     /* For non-counters there must always be a CT. */
-    BUG_ON(!CVT_ANY_COUNTER(get->cvt) && !get->ct);
+    BUG_ON(!CVT_ANY_COUNTER(cvt) && !get->ct);
 
     /* Deal with the inlines and local counters (therefore with inlines and all counters). */
-    if((is_inline = CVT_INLINE(get->cvt)) || CVT_LOCAL_COUNTER(get->cvt))
+    if((is_inline = CVT_INLINE(cvt)) || CVT_LOCAL_COUNTER(cvt))
     {
         debug("Inline.\n");
         /* Release reference of Component Tree. */
@@ -1733,11 +1736,11 @@ void castle_object_get_complete(struct castle_bio_vec *c_bvec,
             castle_ct_put(get->ct, 0);
         get->reply_start(get,
                          0,
-                         get->cvt.length,
-                         is_inline ? get->cvt.val : (void *)&get->cvt.counter,
-                         get->cvt.length);
+                         cvt.length,
+                         is_inline ? cvt.val : (void *)&cvt.counter,
+                         cvt.length);
         if(is_inline)
-            castle_free(get->cvt.val);
+            castle_free(cvt.val);
         castle_utils_bio_free(c_bvec->c_bio);
 
         FAULT(GET_FAULT);
