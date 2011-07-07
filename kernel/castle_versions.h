@@ -51,8 +51,7 @@ int         castle_version_delete                   (c_ver_t version);
 int         castle_version_deleted                  (c_ver_t version);
 int         castle_version_attached                 (c_ver_t version);
 int         castle_version_is_deletable             (struct castle_version_delete_state *state,
-                                                     c_ver_t version,
-                                                     int counter_delta);
+                                                     c_ver_t version);
 int         castle_version_is_leaf                  (c_ver_t version);
 
 int         castle_versions_read                    (void);

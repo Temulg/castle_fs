@@ -434,8 +434,7 @@ static int castle_version_needs_parent(struct castle_version *v, struct castle_v
  * @return 1 if, version is deletable.
  */
 int castle_version_is_deletable(struct castle_version_delete_state *state,
-                                c_ver_t version,
-                                int counter_delta)
+                                c_ver_t version)
 {
     struct castle_version *cur_v = NULL, *w;
     struct list_head *list;
@@ -449,8 +448,7 @@ int castle_version_is_deletable(struct castle_version_delete_state *state,
      * Counter deltas (i.e. adds) don't count as occupied versions, because they
      * rely on their ancestoral versions (just like if the version wasn't written at all).
      */
-    if(!counter_delta)
-        __set_bit(version, state->occupied);
+    __set_bit(version, state->occupied);
 
     read_lock_irq(&castle_versions_hash_lock);
 
