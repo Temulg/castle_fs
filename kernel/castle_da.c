@@ -1555,11 +1555,13 @@ static void castle_ct_merged_iter_skip(c_merged_iter_t *iter,
     {
         comp_iter = iter->iterators + i;
 
+#if 0
         if(!comp_iter->completed && !comp_iter->cached)
         {
             castle_printk(LOG_ERROR, "ERROR, trac-2622: Found incomplete, non-cached iter: %p[%d]=%p\n",
                 iter, i, comp_iter);
         }
+#endif
         //BUG_ON(!comp_iter->completed && !comp_iter->cached);
         BUG_ON(!comp_iter->iterator_type->skip);
     }
