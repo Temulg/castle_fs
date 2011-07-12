@@ -1448,7 +1448,7 @@ static c_val_tup_t castle_ct_merged_iter_counter_reduce(struct component_iterato
     BUG_ON(!CVT_ANY_COUNTER(iter->cached_entry.cvt));
 
     /* Prepare the accumulator. */
-    CVT_COUNTER_LOCAL_ADD_SET(accumulator, 0);
+    CVT_COUNTER_LOCAL_ADD_INIT(accumulator, 0);
 
     /* Deal with the list head. */
     if(castle_counter_simple_reduce(&accumulator, iter->cached_entry.cvt))
@@ -3368,7 +3368,7 @@ static void castle_da_node_complete(struct castle_da_merge *merge, int depth)
                 depth);
         goto release_node;
     }
-    CVT_NODE_SET(node_cvt, (node_c2b->nr_pages * C_BLK_SIZE), node_c2b->cep);
+    CVT_NODE_INIT(node_cvt, (node_c2b->nr_pages * C_BLK_SIZE), node_c2b->cep);
     castle_da_entry_add(merge, depth+1, key, node->version, node_cvt, 0);
 release_node:
     debug("Releasing c2b for cep=" cep_fmt_str_nl, cep2str(node_c2b->cep));
@@ -3968,7 +3968,7 @@ static void castle_da_counter_delete(struct castle_da_merge *merge,
 
         castle_printk(LOG_DEBUG, "Entry cvt is an add.\n");
         /* Accumulation is neccessary. Accumulate entry_cvt first. */
-        CVT_COUNTER_LOCAL_ADD_SET(accumulator_cvt, 0);
+        CVT_COUNTER_LOCAL_ADD_INIT(accumulator_cvt, 0);
         ret = castle_counter_simple_reduce(&accumulator_cvt, entry_cvt);
         /* We know that entry_cvt is an add, therefore accumulation musn't terminate. */
         BUG_ON(ret);

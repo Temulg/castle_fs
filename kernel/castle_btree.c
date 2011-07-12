@@ -1246,7 +1246,7 @@ static void castle_vlba_tree_entry_disable(struct castle_btree_node *node,
 
     /* Disable the entry using the appropriate CVT macro. */
     cvt.type = entry->type;
-    CVT_DISABLED_SET(cvt);
+    CVT_DISABLED_INIT(cvt)
     entry->type = cvt.type;
 }
 
@@ -1876,7 +1876,7 @@ static c2_block_t* castle_btree_effective_node_create(struct castle_component_tr
         } else
         {
             c_val_tup_t cvt;
-            CVT_LEAF_PTR_SET(cvt, orig_c2b->nr_pages * C_BLK_SIZE, orig_c2b->cep);
+            CVT_LEAF_PTR_INIT(cvt, orig_c2b->nr_pages * C_BLK_SIZE, orig_c2b->cep);
             /* Otherwise construct a new leaf pointer. */
             btree->entry_add(eff_node,
                              insert_idx,
@@ -2055,7 +2055,7 @@ static void castle_btree_node_insert(c2_block_t *parent_c2b,
     castle_btree_lub_find(parent, key, version, NULL, &insert_idx);
     debug("Inserting child node into parent (used=0x%x), will insert (k,v)=(%p, 0x%x) at idx=%d.\n",
             parent->used, key, version, insert_idx);
-    CVT_NODE_SET(cvt, child->size * C_BLK_SIZE, child_c2b->cep);
+    CVT_NODE_INIT(cvt, child->size * C_BLK_SIZE, child_c2b->cep);
     castle_btree_slot_insert(parent_c2b,
                              insert_idx,
                              key,
@@ -2079,7 +2079,7 @@ static void castle_btree_node_under_key_insert(c2_block_t *parent_c2b,
     debug("Inserting child node into parent (used=0x%x), "
           "will insert (k,v)=(%p, 0x%x) at idx=%d.\n",
             parent->used, key, version, insert_idx);
-    CVT_NODE_SET(cvt, child->size * C_BLK_SIZE, child_c2b->cep);
+    CVT_NODE_INIT(cvt, child->size * C_BLK_SIZE, child_c2b->cep);
     castle_btree_slot_insert(parent_c2b,
                              insert_idx,
                              key,
@@ -2466,7 +2466,7 @@ static c_val_tup_t castle_btree_counter_read(struct castle_btree_node *node,
     }
 
     /* Otherwise init the accumulator. */
-    CVT_COUNTER_LOCAL_ADD_SET(accumulator, 0);
+    CVT_COUNTER_LOCAL_ADD_INIT(accumulator, 0);
 
     /* Accumulate the start cvt. */
     finish = castle_counter_simple_reduce(&accumulator, cvt);
@@ -4027,7 +4027,7 @@ static struct node_buf_t* node_buf_alloc(c_rq_enum_t *rq_enum)
 
 static void castle_rq_enum_iter_counter_reset(c_rq_enum_t *rq_enum)
 {
-    CVT_INVALID_SET(rq_enum->counter_accumulator);
+    CVT_INVALID_INIT(rq_enum->counter_accumulator);
     rq_enum->counter_key    = NULL;
     rq_enum->counter_buf    = NULL;
     rq_enum->counter_idx    = -1;
@@ -4104,7 +4104,7 @@ static void castle_rq_enum_iter_counter_accum_init(c_rq_enum_t *rq_enum, c_val_t
     rq_enum->counter_idx = rq_enum->prod_idx;
 
     /* Initialise the accumulator. */
-    CVT_COUNTER_LOCAL_ADD_SET(rq_enum->counter_accumulator, 0);
+    CVT_COUNTER_LOCAL_ADD_INIT(rq_enum->counter_accumulator, 0);
 
     /* Deal with the current cvt. */
     castle_rq_enum_iter_counter_accum_continue(rq_enum, cvt);
