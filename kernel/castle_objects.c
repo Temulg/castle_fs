@@ -223,14 +223,7 @@ static inline int castle_object_key_dim_compare(char *dim_a, uint32_t dim_a_len,
     if(cmp)
         return cmp;
 
-    BUG_ON(dim_a_len == PLUS_INFINITY_DIM_LENGTH ||
-           dim_b_len == PLUS_INFINITY_DIM_LENGTH);
-    BUG_ON((dim_a_len == 0) &&
-           !(dim_a_flags & KEY_DIMENSION_MINUS_INFINITY_FLAG) &&
-           !(dim_a_flags & KEY_DIMENSION_PLUS_INFINITY_FLAG));
-    BUG_ON((dim_b_len == 0) &&
-           !(dim_b_flags & KEY_DIMENSION_MINUS_INFINITY_FLAG) &&
-           !(dim_b_flags & KEY_DIMENSION_PLUS_INFINITY_FLAG));
+    BUG_ON(dim_a_len == PLUS_INFINITY_DIM_LENGTH || dim_b_len == PLUS_INFINITY_DIM_LENGTH);
     /* If the common part of the keys the same, check which one is shorter */
     dim_a_len = (dim_a_flags & KEY_DIMENSION_PLUS_INFINITY_FLAG)?
                  PLUS_INFINITY_DIM_LENGTH:
@@ -238,6 +231,17 @@ static inline int castle_object_key_dim_compare(char *dim_a, uint32_t dim_a_len,
     dim_b_len = (dim_b_flags & KEY_DIMENSION_PLUS_INFINITY_FLAG)?
                  PLUS_INFINITY_DIM_LENGTH:
                  dim_b_len;
+
+    if ((dim_a_flags & KEY_DIMENSION_MINUS_INFINITY_FLAG) &&
+        (dim_b_flags & KEY_DIMENSION_MINUS_INFINITY_FLAG))
+        return 0;
+
+    if (dim_a_flags & KEY_DIMENSION_MINUS_INFINITY_FLAG)
+        return -1;
+
+    if (dim_b_flags & KEY_DIMENSION_MINUS_INFINITY_FLAG)
+        return 1;
+
     if(dim_a_len != dim_b_len)
         return (dim_a_len > dim_b_len) ? 1 : -1;
 
@@ -1251,7 +1255,7 @@ int castle_object_replace(struct castle_object_replace *replace,
     c_vl_bkey_t *btree_key = NULL;
     c_bvec_t *c_bvec = NULL;
     c_bio_t *c_bio = NULL;
-    int i, ret;
+    int ret;
 
     /* Sanity checks. */
     BUG_ON(!attachment);
@@ -1262,11 +1266,6 @@ int castle_object_replace(struct castle_object_replace *replace,
      */
     if(!castle_fs_inited)
         return -ENODEV;
-
-    /* Checks on the key. */
-    for (i=0; i<key->nr_dims; i++)
-        if(key->dims[i]->length == 0)
-            return -EINVAL;
 
     /* Create btree key out of the object key. */
     ret = -EINVAL;
