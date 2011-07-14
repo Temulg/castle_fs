@@ -1561,26 +1561,15 @@ static void castle_ct_merged_iter_skip(c_merged_iter_t *iter,
     /* If we are skipping in the merged iterator, we are not able to inform the client
        about all duplicate entries. Check that the client isn't asking for it. */
     BUG_ON(iter->each_skip);
-    /* We expect the iterator to be skipped after prep_next() call (and not after next()).
-       Otherwise, we won't have an entry cached for some of the component iterator
-       and we will be unable to decided whether to skip in them.
-       prep_next() guarantees that each of the component iterator will either be
-       completed or there will be something cached for that iterator.
-       Also, all iterators should support skip functionality.
-     */
+
+    /* Call skip on lower level iterators, if the iterator is not cached. */
     for(i=0; i<iter->nr_iters; i++)
     {
         comp_iter = iter->iterators + i;
 
-#if 0
-        if(!comp_iter->completed && !comp_iter->cached)
-        {
-            castle_printk(LOG_ERROR, "ERROR, trac-2622: Found incomplete, non-cached iter: %p[%d]=%p\n",
-                iter, i, comp_iter);
-        }
-#endif
-        //BUG_ON(!comp_iter->completed && !comp_iter->cached);
         BUG_ON(!comp_iter->iterator_type->skip);
+        if (!comp_iter->completed && !comp_iter->cached)
+            comp_iter->iterator_type->skip(comp_iter->iterator, key);
     }
 
     /* Go through the rbtree, and extract all the keys smaller than the key we
