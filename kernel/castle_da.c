@@ -74,6 +74,12 @@ int                             castle_merges_checkpoint = 1; /* 0 or 1, default
 module_param(castle_merges_checkpoint, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 MODULE_PARM_DESC(castle_merges_checkpoint, "Checkpoint on-going merges");
 
+int                             castle_rwct_checkpoint_frequency = 10;  /**< Number of checkpoints
+                                                                             before RWCTs are
+                                                                             promoted to level 1. */
+module_param(castle_rwct_checkpoint_frequency, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+MODULE_PARM_DESC(castle_rwct_checkpoint_frequency, "Number checkpoints before RWCTs are promoted.");
+
 static struct
 {
     int                     cnt;    /**< Size of cpus array.                        */
@@ -7405,7 +7411,6 @@ out:
     castle_da_store = castle_tree_store = castle_lo_store = castle_dmser_store = NULL;
 }
 
-#define RWCT_CHECKPOINT_FREQUENCY   (10)    /**< Checkpoint level 0 RWCTs every N checkpoints. */
 /**
  * Perform any work prior to castle_double_arrays_writeback() outside of transaction lock.
  *
@@ -7418,7 +7423,7 @@ void castle_double_arrays_pre_writeback(void)
     static int rwct_checkpoints = 0;
     atomic_t in_flight = ATOMIC(0);
 
-    if (!castle_da_exiting && ++rwct_checkpoints >= RWCT_CHECKPOINT_FREQUENCY)
+    if (!castle_da_exiting && ++rwct_checkpoints >= castle_rwct_checkpoint_frequency)
     {
         /* Promote non-empty CTs in all DAs. */
         castle_da_hash_iterate(castle_da_level0_modified_promote, &in_flight);
