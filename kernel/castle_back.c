@@ -1992,9 +1992,8 @@ static void castle_back_iter_next(void *data)
     if (!stateful_op)
     {
         error("Token not found 0x%x\n", op->req.iter_next.token);
-
-        castle_back_reply(op, -EBADFD, 0, 0);
-
+        err = -EBADFD;
+        castle_back_reply(op, err, 0, 0);
         return;
     }
 
@@ -2032,8 +2031,7 @@ static void castle_back_iter_next(void *data)
 
     return;
 
-err0:
-    castle_back_iter_reply(stateful_op, op, err);
+err0: castle_back_reply(op, err, 0, 0);
 }
 
 static void castle_back_iter_cleanup(struct castle_back_stateful_op *stateful_op)
@@ -2105,10 +2103,8 @@ static void castle_back_iter_finish(void *data)
     if (!stateful_op)
     {
         error("Token not found 0x%x\n", op->req.iter_finish.token);
-
-        castle_back_reply(op, -EBADFD, 0, 0);
-
-        return;
+        err = -EBADFD;
+        goto err0;
     }
 
     /*
@@ -2130,7 +2126,7 @@ static void castle_back_iter_finish(void *data)
     return;
 
 err0:
-    castle_back_iter_reply(stateful_op, op, err);
+    castle_back_reply(op, err, 0, 0);
 }
 
 /**** BIG PUT ****/
