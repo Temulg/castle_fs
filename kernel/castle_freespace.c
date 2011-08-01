@@ -414,9 +414,8 @@ static int castle_freespace_slave_writeback(struct castle_slave *cs, void *unuse
 
     castle_slave_superblock_put(cs, 1);
 
-    if (!test_bit(CASTLE_SLAVE_OOS_BIT, &cs->flags))
-        castle_cache_extent_flush_schedule(cs->sup_ext, FREESPACE_OFFSET,
-                                           cs->freespace.nr_entries * sizeof(c_chk_t));
+    castle_cache_extent_flush_schedule(cs->sup_ext, FREESPACE_OFFSET,
+                                       cs->freespace.nr_entries * sizeof(c_chk_t));
     INJECT_FAULT;
 
     return 0;
